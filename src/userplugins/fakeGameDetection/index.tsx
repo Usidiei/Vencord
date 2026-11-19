@@ -37,12 +37,12 @@ interface FakeGameObject {
 }
 
 // ==========================================
-// 1. CÀI ĐẶT PLUGIN (SETTINGS)
+// 1. CÀI ĐẶT PLUGIN (TÁCH BIỆT VỚI ENABLED)
 // ==========================================
 const settings = definePluginSettings({
-    enabled: {
+    enablePresence: {
         type: OptionType.BOOLEAN,
-        description: "Enable Presence — Bật/tắt giả lập đang chơi game qua RunningGameStore",
+        description: "Whether to show the presence (Bật/tắt giả lập game qua RunningGameStore)",
         default: true,
         onChange: (val: boolean) => {
             if (val) startSpoof();
@@ -57,11 +57,10 @@ const settings = definePluginSettings({
             </ErrorBoundary>
         ),
     },
-    // Các trường lưu ngầm để khởi động lại Discord không phải tải lại catalog 20MB
     appId: {
         type: OptionType.STRING,
         hidden: true,
-        default: "1236687512530063482", // ID Minecraft mặc định
+        default: "1236687512530063482",
     },
     appName: {
         type: OptionType.STRING,
@@ -80,16 +79,16 @@ const settings = definePluginSettings({
     },
     customExeOverride: {
         type: OptionType.STRING,
-        description: "Ghi đè tên file .exe thủ công (để trống nếu muốn dùng tự động theo game đã chọn)",
+        description: "Ghi đè tên file .exe thủ công (để trống nếu muốn tự động theo game đã chọn)",
         default: "",
         onChange: () => {
-            if (settings.store.enabled) restartSpoof();
+            if (settings.store.enablePresence) restartSpoof();
         },
     },
 });
 
 // ==========================================
-// 2. LOGIC TẢI & TRA CỨU GAME (GIỐNG QUEST COMPLETER)
+// 2. LOGIC TẢI & TRA CỨU GAME
 // ==========================================
 let cachedCatalog: DetectableApp[] | null = null;
 let catalogPromise: Promise<DetectableApp[]> | null = null;
@@ -120,7 +119,6 @@ function resolveExeName(app: DetectableApp): string {
         const cleaned = winExe.name.replace(/^>/, "");
         return cleaned.split("/").pop() || cleaned;
     }
-    // Fallback cho các game mới có mảng executables rỗng
     const slug = app.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "game";
     return `${slug}.exe`;
 }
@@ -131,7 +129,7 @@ function getAppIconUrl(appId: string, iconHash?: string): string | null {
 }
 
 // ==========================================
-// 3. HOOK RUNNINGGAMESTORE (GIẢ LẬP GAME THẬT)
+// 3. HOOK RUNNINGGAMESTORE
 // ==========================================
 let activeFakeGame: FakeGameObject | null = null;
 let isPatched = false;
@@ -200,7 +198,7 @@ function unpatchRunningGameStore() {
 }
 
 function startSpoof() {
-    if (!settings.store.enabled) return;
+    if (!settings.store.enablePresence) return;
 
     patchRunningGameStore();
     if (!RunningGameStore) return;
@@ -267,8 +265,8 @@ function formatElapsed(startMs: number): string {
 }
 
 function PresencePreviewCard() {
-    const { enabled, appId, appName, appIcon, exeName, customExeOverride } = settings.use([
-        "enabled",
+    const { enablePresence, appId, appName, appIcon, exeName, customExeOverride } = settings.use([
+        "enablePresence",
         "appId",
         "appName",
         "appIcon",
@@ -279,12 +277,10 @@ function PresencePreviewCard() {
     const [, setTick] = React.useState(0);
     const [imgError, setImgError] = React.useState(false);
 
-    // Reset trạng thái lỗi ảnh khi đổi game
     React.useEffect(() => {
         setImgError(false);
     }, [appId, appIcon]);
 
-    // Cập nhật bộ đếm thời gian mỗi giây giống CustomRPC
     React.useEffect(() => {
         const timer = setInterval(() => setTick(t => t + 1), 1000);
         return () => clearInterval(timer);
@@ -301,7 +297,6 @@ function PresencePreviewCard() {
                 Chọn một tựa game ở ô tìm kiếm bên dưới để áp dụng ngay lập tức.
             </div>
 
-            {/* Thẻ Preview mô phỏng hộp Activity của CustomRPC */}
             <div
                 style={{
                     backgroundColor: "var(--background-secondary-alt, #1e1f22)",
@@ -309,7 +304,7 @@ function PresencePreviewCard() {
                     borderRadius: "8px",
                     padding: "12px",
                     maxWidth: "320px",
-                    opacity: enabled ? 1 : 0.65,
+                    opacity: enablePresence ? 1 : 0.65,
                 }}
             >
                 <div
@@ -323,12 +318,11 @@ function PresencePreviewCard() {
                         color: "var(--header-secondary, #b5bac1)",
                     }}
                 >
-                    <span>{enabled ? "Đang chơi" : "Đang chơi (Tạm tắt)"}</span>
+                    <span>{enablePresence ? "Đang chơi" : "Đang chơi (Tạm tắt)"}</span>
                     <span style={{ letterSpacing: "1px", opacity: 0.7 }}>•••</span>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    {/* Ảnh Icon Game hoặc ô dấu ? nếu chưa có ảnh */}
                     <div
                         style={{
                             width: "60px",
@@ -378,14 +372,13 @@ function PresencePreviewCard() {
                                 marginTop: "4px",
                                 fontSize: "12px",
                                 fontWeight: 600,
-                                color: enabled ? "#23a55a" : "var(--text-muted, #949ba4)",
+                                color: enablePresence ? "#23a55a" : "var(--text-muted, #949ba4)",
                             }}
                         >
-                            {/* Icon tay cầm nhỏ màu xanh giống Discord */}
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M17.5 6H6.5C3.46 6 1 8.46 1 11.5v3.25C1 16.54 2.46 18 4.25 18c1.1 0 2.13-.55 2.74-1.47L8.35 14.5h7.3l1.36 2.03A3.29 3.29 0 0 0 19.75 18C21.54 18 23 16.54 23 14.75V11.5C23 8.46 20.54 6 17.5 6ZM9 12H7.5v1.5h-1.5V12H4.5v-1.5H6V9h1.5v1.5H9V12Zm7.5-.75a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm2.5 2a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" />
                             </svg>
-                            <span>{enabled ? formatElapsed(startMs) : "0:00"}</span>
+                            <span>{enablePresence ? formatElapsed(startMs) : "0:00"}</span>
                         </div>
 
                         <div
@@ -408,7 +401,7 @@ function PresencePreviewCard() {
 }
 
 // ==========================================
-// 5. Ô TÌM KIẾM ỨNG DỤNG TRONG CONFIG
+// 5. Ô TÌM KIẾM ỨNG DỤNG
 // ==========================================
 function AppSearchSelector() {
     const { appId, appName } = settings.use(["appId", "appName"]);
@@ -434,7 +427,6 @@ function AppSearchSelector() {
         if (!catalog.length) return [];
         const q = query.trim().toLowerCase();
 
-        // Nếu chưa gõ gì thì hiển thị vài game phổ biến / đang chọn
         if (!q) {
             return catalog.slice(0, 30);
         }
@@ -463,7 +455,7 @@ function AppSearchSelector() {
         settings.store.appIcon = app.icon_hash || app.icon || "";
         settings.store.exeName = resolveExeName(app);
 
-        if (settings.store.enabled) {
+        if (settings.store.enablePresence) {
             restartSpoof();
         }
     };
@@ -636,6 +628,7 @@ export default definePlugin({
     name: "FakeGameDetection",
     description: "Giả lập đang chơi game qua RunningGameStore kèm trình tìm kiếm ứng dụng & Preview như CustomRPC",
     authors: [{ name: "Minbaka", id: 0n }],
+    tags: ["Activity", "Customisation"],
     settings,
 
     settingsAboutComponent: () => (
@@ -646,12 +639,12 @@ export default definePlugin({
 
     flux: {
         CONNECTION_OPEN() {
-            if (settings.store.enabled) startSpoof();
+            if (settings.store.enablePresence) startSpoof();
         },
     },
 
     start() {
-        if (settings.store.enabled) startSpoof();
+        if (settings.store.enablePresence) startSpoof();
     },
 
     stop() {
