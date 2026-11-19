@@ -39,9 +39,8 @@ jobs:
 
                   BEFORE_HASH=$(git rev-parse HEAD)
 
-                  git remote add upstream https://github.com/Vendicated/Vencord.git
-                  git fetch upstream main
-                  git merge upstream/main --no-edit
+                  git fetch https://github.com/Vendicated/Vencord.git main
+                  git merge FETCH_HEAD --no-edit
 
                   AFTER_HASH=$(git rev-parse HEAD)
 
@@ -94,14 +93,16 @@ jobs:
               if: github.event_name != 'schedule' || steps.sync.outputs.updated == 'true'
               run: |
                   mapfile -t FILES < <(find dist -maxdepth 1 -type f)
-                  if gh release view devbuild >/dev/null 2>&1; then
-                      gh release upload devbuild --clobber "${FILES[@]}"
-                      gh release edit devbuild --title "DevBuild $RELEASE_TAG"
+                  if gh release view devbuild --repo "$GH_REPO" >/dev/null 2>&1; then
+                      gh release upload devbuild --repo "$GH_REPO" --clobber "${FILES[@]}"
+                      gh release edit devbuild --repo "$GH_REPO" --title "DevBuild $RELEASE_TAG"
                   else
                       gh release create devbuild "${FILES[@]}" \
+                          --repo "$GH_REPO" \
                           --title "DevBuild $RELEASE_TAG" \
                           --notes "Custom DevBuild synced with Vendicated/Vencord"
                   fi
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GH_REPO: ${{ github.repository }}
                   RELEASE_TAG: ${{ env.release_tag }}
