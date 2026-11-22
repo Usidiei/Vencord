@@ -129,7 +129,7 @@ function getAppIconUrl(appId: string, iconHash?: string): string | null {
 }
 
 // ==========================================
-// 3. HOOK RUNNINGGAMESTORE
+// 3. HOOK RUNNINGGAMESTORE (KIỂU 1 + GIỮ PHIÊN LIÊN TỤC)
 // ==========================================
 let activeFakeGame: FakeGameObject | null = null;
 let isPatched = false;
@@ -154,19 +154,20 @@ function patchRunningGameStore() {
     origGetVisibleGame = RunningGameStore.getVisibleGame;
     origGetGameForPID = RunningGameStore.getGameForPID;
 
+    // KIỂU 1: Nếu mở game thật TRÙNG ID với game đang fake -> ẩn bản fake để tránh trùng
     RunningGameStore.getRunningGames = function () {
         const real = origGetRunningGames?.call(this) ?? [];
-        return activeFakeGame
-            ? [...real.filter((g: any) => g.pid !== activeFakeGame!.pid), activeFakeGame]
-            : real;
+        if (!activeFakeGame) return real;
+        const hasSameRealGame = real.some((g: any) => g.id === activeFakeGame!.id);
+        return hasSameRealGame ? real : [...real, activeFakeGame];
     };
 
     if (origGetVisibleRunningGames) {
         RunningGameStore.getVisibleRunningGames = function () {
             const real = origGetVisibleRunningGames?.call(this) ?? [];
-            return activeFakeGame
-                ? [...real.filter((g: any) => g.pid !== activeFakeGame!.pid), activeFakeGame]
-                : real;
+            if (!activeFakeGame) return real;
+            const hasSameRealGame = real.some((g: any) => g.id === activeFakeGame!.id);
+            return hasSameRealGame ? real : [...real, activeFakeGame];
         };
     }
 
@@ -199,6 +200,7 @@ function unpatchRunningGameStore() {
 
 function startSpoof() {
     if (!settings.store.enablePresence) return;
+    if (activeFakeGame) return; // Đã chạy rồi thì không tạo đè để giữ nguyên chuỗi giờ liên tục
 
     patchRunningGameStore();
     if (!RunningGameStore) return;
@@ -230,7 +232,7 @@ function startSpoof() {
         games: RunningGameStore.getRunningGames(),
     });
 
-    logger.info(`Đang giả lập: ${appName} (ID: ${appId}, Exe: ${finalExe})`);
+    logger.info(`Đang giả lập liên tục: ${appName} (ID: ${appId}, Exe: ${finalExe})`);
 }
 
 function stopSpoof() {
@@ -250,6 +252,13 @@ function stopSpoof() {
 function restartSpoof() {
     stopSpoof();
     startSpoof();
+}
+
+// Chốt phiên tức thì khi đóng Discord hoặc Windows gửi tín hiệu đóng cửa sổ
+function handleWindowUnload() {
+    if (activeFakeGame) {
+        stopSpoof();
+    }
 }
 
 // ==========================================
@@ -293,8 +302,8 @@ function PresencePreviewCard() {
     return (
         <div style={{ marginTop: "8px", marginBottom: "16px" }}>
             <div style={{ color: "var(--text-muted)", fontSize: "13px", marginBottom: "12px", lineHeight: "1.4" }}>
-                Plugin giả lập tiến trình game trực tiếp vào <b>RunningGameStore</b> (không cần tạo AppID thủ công).
-                Chọn một tựa game ở ô tìm kiếm bên dưới để áp dụng ngay lập tức.
+                Plugin giả lập tiến trình game liên tục qua <b>RunningGameStore</b> (không tự reset giờ chơi).
+                Nếu mở trùng đúng game đang fake ngoài đời thật, plugin sẽ tự nhường cho game thật.
             </div>
 
             <div
@@ -627,7 +636,7 @@ function AppSearchSelector() {
 export default definePlugin({
     name: "FakeGameDetection",
     description: "Giả lập đang chơi game qua RunningGameStore kèm trình tìm kiếm ứng dụng & Preview như CustomRPC",
-    authors: [{ name: "Minbaka", id: 0n }],
+    authors: [{ name: "Usidiei", id: 0n }],
     tags: ["Activity", "Customisation"],
     settings,
 
@@ -644,10 +653,16 @@ export default definePlugin({
     },
 
     start() {
+        window.addEventListener("beforeunload", handleWindowUnload);
+        window.addEventListener("pagehide", handleWindowUnload);
+
         if (settings.store.enablePresence) startSpoof();
     },
 
     stop() {
+        window.removeEventListener("beforeunload", handleWindowUnload);
+        window.removeEventListener("pagehide", handleWindowUnload);
+
         stopSpoof();
         unpatchRunningGameStore();
     },
